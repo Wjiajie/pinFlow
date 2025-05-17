@@ -5,7 +5,9 @@ import 'package:get/get.dart';
 import 'package:pinflow/app/core/services/database_service.dart';
 import 'package:pinflow/app/data/models/note_document.dart';
 import 'package:pinflow/app/modules/editor/note_editor_arguments.dart';
-import 'package:pinflow/app/modules/home/home_controller.dart'; // 用于刷新主页笔记列表
+import 'package:pinflow/app/modules/home/home_controller.dart';
+// import 'dart:developer' as developer; // 可以移除了
+import 'package:pinflow/app/core/utils/logger_service.dart'; // <--- 导入 AppLogger
 
 /// EditorScreen 的控制器。
 ///
@@ -47,6 +49,7 @@ class EditorController extends GetxController {
       titleTextController.text = "新笔记"; // 默认标题
       isLoading.value = false;
     }
+    AppLogger.debug("EditorController onInit. NoteId: $_noteId"); // 示例
   }
 
   /// 加载现有笔记到编辑器。
@@ -54,6 +57,7 @@ class EditorController extends GetxController {
   /// @param id 要加载的笔记的 ID。
   Future<void> _loadNote(int id) async {
     isLoading.value = true;
+    AppLogger.debug("_loadNote called for id: $id", "EditorController._loadNote");
     _currentNote = await _dbService.getNoteById(id);
     if (_currentNote != null) {
       titleTextController.text = _currentNote!.title;
@@ -65,8 +69,8 @@ class EditorController extends GetxController {
             document: quill.Document.fromJson(deltaJson),
             selection: const TextSelection.collapsed(offset: 0), // 光标初始位置
           );
-        } catch (e) {
-          print("Error decoding Quill Delta JSON: $e");
+        } catch (e, stackTrace) {
+          AppLogger.error("Error decoding Quill Delta JSON: $e", e, stackTrace);
           // 解码失败则使用空文档
           quillController = quill.QuillController.basic();
         }
@@ -88,43 +92,62 @@ class EditorController extends GetxController {
 
   /// 保存当前笔记 (新建或更新)。
   Future<void> saveNote() async {
-    if (isLoading.value) return; // 如果正在加载，则不执行保存
+    AppLogger.debug('saveNote called. isLoading: ${isLoading.value}', "EditorController.saveNote");
+    if (isLoading.value) {
+      AppLogger.warning('saveNote: Aborting save because isLoading is true.', "EditorController.saveNote");
+      Get.snackbar("请稍候", "笔记正在加载或处理中...", snackPosition: SnackPosition.BOTTOM);
+      return;
+    }
 
-    final now = DateTime.now();
-    // 将 Quill Document 转换为 JSON Delta 以便存储
-    final deltaJsonString = jsonEncode(quillController.document.toDelta().toJson());
-    
-    // TODO: 实现 Delta 到 Markdown 的转换逻辑，并存储到 markdownContent 字段
-    // String markdownContent = convertDeltaToMarkdown(quillController.document.toDelta());
+    AppLogger.info('saveNote: Proceeding with save.', "EditorController.saveNote");
 
-    final title = titleTextController.text.isEmpty ? "无标题笔记" : titleTextController.text;
+    try {
+      final now = DateTime.now();
+      AppLogger.trace('saveNote: Converting document to Delta JSON...', "EditorController.saveNote");
+      final delta = quillController.document.toDelta();
+      final deltaJsonList = delta.toJson();
+      final deltaJsonString = jsonEncode(deltaJsonList);
+      AppLogger.trace('saveNote: Delta JSON string length: ${deltaJsonString.length}', "EditorController.saveNote");
 
-    if (_currentNote != null && _noteId != null) {
-      // 更新现有笔记
-      _currentNote!.title = title;
-      _currentNote!.contentDeltaJson = deltaJsonString;
-      // _currentNote!.markdownContent = markdownContent; // 如果实现了 Markdown 转换
-      _currentNote!.updatedAt = now;
-      await _dbService.saveNote(_currentNote!);
-    } else {
-      // 创建新笔记
-      final newNote = NoteDocument(
-        title: title,
-        contentDeltaJson: deltaJsonString,
-        // markdownContent: markdownContent, // 如果实现了 Markdown 转换
-        createdAt: now,
-        updatedAt: now,
-      );
-      // TODO: 实现将笔记分配给默认文件夹/空间，或允许用户选择
-      await _dbService.saveNote(newNote);
+      final title = titleTextController.text.isEmpty ? "无标题笔记" : titleTextController.text;
+      AppLogger.debug('saveNote: Title: "$title"', "EditorController.saveNote");
+
+      if (_currentNote != null && _noteId != null) {
+        AppLogger.info('saveNote: Updating existing note with id: $_noteId', "EditorController.saveNote");
+        _currentNote!.title = title;
+        _currentNote!.contentDeltaJson = deltaJsonString;
+        _currentNote!.updatedAt = now;
+        await _dbService.saveNote(_currentNote!);
+        AppLogger.info('saveNote: Existing note updated successfully.', "EditorController.saveNote");
+      } else {
+        AppLogger.info('saveNote: Creating new note.', "EditorController.saveNote");
+        final newNote = NoteDocument(
+          title: title,
+          contentDeltaJson: deltaJsonString,
+          createdAt: now,
+          updatedAt: now,
+        );
+        await _dbService.saveNote(newNote);
+        AppLogger.info('saveNote: New note created and saved successfully.', "EditorController.saveNote");
+      }
+    } catch (e, stackTrace) {
+      AppLogger.error('saveNote: Error during save process', e, stackTrace);
+      Get.snackbar("保存失败", "保存笔记时发生错误: $e", snackPosition: SnackPosition.BOTTOM, backgroundColor: Colors.red, colorText: Colors.white, duration: const Duration(seconds: 5));
+      return;
     }
     
-    // 刷新 HomeScreen 上的笔记列表
+    AppLogger.debug('saveNote: Attempting to refresh HomeController notes.', "EditorController.saveNote");
     if (Get.isRegistered<HomeController>()) {
       Get.find<HomeController>().loadNotes();
+      AppLogger.debug('saveNote: HomeController.loadNotes() called.', "EditorController.saveNote");
+    } else {
+      AppLogger.warning('saveNote: HomeController not registered.', "EditorController.saveNote");
     }
-    Get.back(); // 保存后返回上一屏幕
+
+    AppLogger.info('saveNote: Navigating back and showing success snackbar.', "EditorController.saveNote");
+    Get.back(); 
     Get.snackbar("已保存", "笔记已成功保存！", snackPosition: SnackPosition.BOTTOM);
+    AppLogger.debug('saveNote: Completed.', "EditorController.saveNote");
   }
 
   /// Controller 关闭时调用，用于释放资源。

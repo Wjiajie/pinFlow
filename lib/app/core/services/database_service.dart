@@ -4,6 +4,7 @@ import 'package:get/get.dart';  // 添加 GetX 的导入
 import 'package:pinflow/app/data/models/note_document.dart';
 import 'package:pinflow/app/data/models/folder.dart';
 import 'package:pinflow/app/data/models/space.dart';
+import 'package:pinflow/app/core/utils/logger_service.dart'; // <--- 导入 AppLogger
 
 /// 数据库服务类
 ///
@@ -19,6 +20,7 @@ class DatabaseService extends GetxService { // 继承 GetxService 以便 GetX �
   /// 在构造时调用 `_openDB` 初始化数据库。
   DatabaseService() {
     db = _openDB();
+    AppLogger.info("DatabaseService initialized.");
   }
 
   /// 打开 Isar 数据库。
@@ -26,6 +28,7 @@ class DatabaseService extends GetxService { // 继承 GetxService 以便 GetX �
   /// 如果 Isar 实例尚不存在，则会创建一个新的实例。
   /// 数据库文件将存储在应用文档目录中。
   Future<Isar> _openDB() async {
+    AppLogger.debug("_openDB called.");
     // 检查是否已经有名为 'pinflow_db' 的 Isar 实例
     if (Isar.instanceNames.isEmpty || Isar.getInstance('pinflow_db') == null) {
       final dir = await getApplicationDocumentsDirectory(); // 获取应用文档目录
@@ -46,14 +49,20 @@ class DatabaseService extends GetxService { // 继承 GetxService 以便 GetX �
   /// @param note 要保存的 NoteDocument 对象。
   Future<void> saveNote(NoteDocument note) async {
     final isar = await db;
-    // Isar 的写操作需要在事务中执行
-    await isar.writeTxn(() async {
-      await isar.noteDocuments.put(note); // `put` 会插入新对象或更新已存在的对象
-      // 如果笔记关联了文件夹，确保文件夹链接也被保存
-      if (note.folder.value != null) {
-        await note.folder.save();
-      }
-    });
+    AppLogger.debug("Saving note: ${note.title} (ID: ${note.id})", "DatabaseService.saveNote");
+    try {
+      await isar.writeTxn(() async {
+        await isar.noteDocuments.put(note);
+        // 移除可能导致事务嵌套的 folder.save() 调用（Isar 会自动处理关联关系）
+        // if (note.folder.value != null) {
+        //   await note.folder.save();
+        // }
+      });
+      AppLogger.info("Note saved successfully: ${note.title} (ID: ${note.id})", "DatabaseService.saveNote");
+    } catch (e, stackTrace) {
+      AppLogger.error("Error saving note: ${note.title}", e, stackTrace);
+      rethrow; // Re-throw the exception if you want calling code to handle it
+    }
   }
 
   /// 根据 ID 获取一个笔记。
@@ -62,7 +71,14 @@ class DatabaseService extends GetxService { // 继承 GetxService 以便 GetX �
   /// @return 返回找到的 NoteDocument 对象，如果未找到则返回 null。
   Future<NoteDocument?> getNoteById(int id) async {
     final isar = await db;
-    return await isar.noteDocuments.get(id);
+    AppLogger.debug("Getting note by ID: $id", "DatabaseService.getNoteById");
+    final note = await isar.noteDocuments.get(id);
+    if (note == null) {
+      AppLogger.warning("Note with ID $id not found.", "DatabaseService.getNoteById");
+    } else {
+      AppLogger.debug("Note found: ${note.title}", "DatabaseService.getNoteById");
+    }
+    return note;
   }
 
   /// 获取所有笔记。
@@ -70,7 +86,10 @@ class DatabaseService extends GetxService { // 继承 GetxService 以便 GetX �
   /// @return 返回包含所有 NoteDocument 对象的列表。
   Future<List<NoteDocument>> getAllNotes() async {
     final isar = await db;
-    return await isar.noteDocuments.where().findAll();
+    AppLogger.debug("Getting all notes.", "DatabaseService.getAllNotes");
+    final notes = await isar.noteDocuments.where().findAll();
+    AppLogger.info("Retrieved ${notes.length} notes.", "DatabaseService.getAllNotes");
+    return notes;
   }
   
   /// 根据 ID 删除一个笔记。
@@ -79,7 +98,19 @@ class DatabaseService extends GetxService { // 继承 GetxService 以便 GetX �
   /// @return 如果删除成功返回 true，否则返回 false。
   Future<bool> deleteNote(int id) async {
     final isar = await db;
-    return await isar.writeTxn(() async => await isar.noteDocuments.delete(id));
+    AppLogger.debug("Deleting note with ID: $id", "DatabaseService.deleteNote");
+    try {
+      final success = await isar.writeTxn(() async => await isar.noteDocuments.delete(id));
+      if (success) {
+        AppLogger.info("Note with ID $id deleted successfully.", "DatabaseService.deleteNote");
+      } else {
+        AppLogger.warning("Failed to delete note with ID $id (not found or error).", "DatabaseService.deleteNote");
+      }
+      return success;
+    } catch (e, stackTrace) {
+      AppLogger.error("Error deleting note with ID $id", e, stackTrace);
+      return false;
+    }
   }
 
   // --- Folder CRUD 操作 (待实现) ---

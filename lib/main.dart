@@ -2,6 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:pinflow/app/core/services/database_service.dart'; // 我们稍后会创建这个文件
 import 'package:pinflow/app/routes/app_pages.dart'; // 我们稍后会创建这个文件
+import 'package:flutter_localizations/flutter_localizations.dart'; // 通常已经存在
+import 'package:flutter_quill/flutter_quill.dart'; // 添加或确保此导入存在
+import 'package:flutter/foundation.dart'; // For kReleaseMode
+import 'package:logger/logger.dart'; // Import Logger for level setting
+import 'package:pinflow/app/core/utils/logger_service.dart'; // 导入 AppLogger (如果需要在这里调用)
+
 
 /// 应用主入口函数
 ///
@@ -9,6 +15,15 @@ import 'package:pinflow/app/routes/app_pages.dart'; // 我们稍后会创建这�
 Future<void> main() async {
   // 确保 Flutter 绑定已初始化，这对于在 runApp 之前执行异步操作是必需的
   WidgetsFlutterBinding.ensureInitialized();
+
+  // 设置 Logger 级别 (可选, AppLogger 内部已根据 kReleaseMode 设置)
+  if (kReleaseMode) {
+    Logger.level = Level.warning;
+  } else {
+    Logger.level = Level.trace;
+  }
+  AppLogger.info("Logger initialized. Release mode: $kReleaseMode, Log level: ${Logger.level}");
+
 
   // 初始化服务
   // 使用 Get.putAsync 异步初始化 DatabaseService (Isar)
@@ -44,6 +59,17 @@ class MyApp extends StatelessWidget {
       //   useMaterial3: true,
       // ),
       // themeMode: ThemeMode.system, // 跟随系统主题设置
+      localizationsDelegates: [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+        FlutterQuillLocalizations.delegate, // <--- 添加这一行
+      ],
+      supportedLocales: const [
+        Locale('en', 'US'), // 英语
+        Locale('zh', 'CN'), // 简体中文
+        // ... 添加您应用支持的其他语言
+      ],
     );
   }
 }
