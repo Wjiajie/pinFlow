@@ -13,6 +13,7 @@ import 'package:pinflow/app/core/utils/logger_service.dart'; // <--- 导入 AppL
 ///
 /// 管理笔记编辑的状态和逻辑，包括 Quill 编辑器控制器、笔记标题、加载和保存笔记。
 class EditorController extends GetxController {
+  final FocusNode editorFocusNode = FocusNode(); // 新增：编辑器焦点节点
   /// 数据库服务实例。
   final DatabaseService _dbService = Get.find();
 

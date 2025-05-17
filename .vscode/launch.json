@@ -22,15 +22,11 @@
             "type": "msedge",
             "webRoot": "${workspaceFolder}"
         },
-
-
-
         {
             "name": "pinFlow",
             "request": "launch",
             "type": "dart",
-            "program": "lib/main.dart", // 明确指定入口文件
-            "deviceId": "all" // 自动选择可用设备（或替换为你的设备 ID，如 "NX721J"）
+            "program": "lib/main.dart"
         },
         {
             "name": "pinFlow (profile mode)",

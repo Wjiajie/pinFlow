@@ -81,13 +81,13 @@ class EditorScreen extends GetView<EditorController> {
                     builder: (editorCtrl) {
                       return QuillEditor(
                         controller: editorCtrl.quillController,
-                        focusNode: FocusNode(),
+                        focusNode: editorCtrl.editorFocusNode, // 使用控制器中的焦点节点（关键修改）
                         scrollController: ScrollController(),
                         config: QuillEditorConfig(
                           placeholder: '在这里开始写作...',
                           padding: const EdgeInsets.all(16),
                           scrollable: true,
-                          autoFocus: false,
+                          autoFocus: true,
                           expands: false,
                           enableInteractiveSelection: true,
                           enableSelectionToolbar: true,
